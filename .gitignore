@@ -2,6 +2,7 @@
 .idea/
 node_modules/
 .venv
+jerseys
 assets/*.glb
 assets/pcm_*
 assets/pcmmod/

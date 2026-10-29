@@ -18,7 +18,12 @@ Machine; Cyanide's asset, never committed). The README has the method.
   comes out split near the collar on Biketerra just as it sits on PCM.
 - Text that reads mirrored means a side has flipped: check the `left` hints
   in `src/pcm.js` and `pcm2bt.mjs`, not the UVs.
-- `DEBUG=1` writes both riders' canonical coordinates as colour; converting
-  `OUT-pcmcoords.png` should reproduce `OUT-coords.png`. Where it doesn't,
-  the correspondence is off there.
+- `DEBUG=1` writes `OUT-hits.png` (green where Biketerra's surface found
+  PCM's by ray, magenta where it fell back to the nearest point) and
+  `OUT-reposed.json`, PCM's mesh reposed onto Biketerra's rider, which
+  `node debug/pcmrender.mjs X.png FWD LEFT UP KIT OUT-reposed.json` renders.
+  Magenta on the jersey (not the bare arm past the cut) marks where the
+  mapping is guessing.
+- Sleeves are cut to PCM's length by default; `SLEEVE=full` keeps
+  Biketerra's, `SLEEVE=0.16` a length in metres.
 - Not checked in-game; uploading on the settings Avatar tab is the test.

@@ -1,6 +1,5 @@
-// Pro Cycling Manager kit -> Biketerra jersey by repose and project (MAP=project
-// in pcm2bt.mjs), the alternative to pcm.js's canonical body. PCM's jersey is
-// reposed with its own skeleton onto Biketerra's landmarks, and each Biketerra
+// Pro Cycling Manager kit -> Biketerra jersey by repose and project. PCM's
+// jersey is reposed with its own skeleton onto Biketerra's landmarks, and each Biketerra
 // point takes the kit UV where a ray along its normal meets PCM's surface.
 //
 // The work is done in PCM's mesh space (z up, facing -y, x mirrored), so the
@@ -18,7 +17,7 @@
 //   shoulder joint lands on Biketerra's;
 // - upper arms (PCM has no forearm bones; the sleeve is all upper arm): then
 //   turned and stretched about the joint so the cuff centroid lands on
-//   Biketerra's (bt.sleeveLen shortens it, as pcm.js does), and twisted
+//   Biketerra's (bt.sleeveLen shortens it: SLEEVE in pcm2bt.mjs), and twisted
 //   TWIST round the arm, nothing at the joint to all of it at the cuff. Then
 //   stretched along the arm per angle round it, so PCM's cuff loop lands on
 //   Biketerra's cut (pcm.js frames().cut, where pcm2bt.mjs turns texels
@@ -177,9 +176,10 @@ export function repose(pcm, skin, bt, twist = 0, cut = null) {
     target.joint[s] = Jt; target.cuff[s] = Ct;
     const o = torso(bone(`${S}_Clavicle`).at), clav = swing(o, torso(Jp), Jt), clavF = (p) => clav(torso(p));
     const arm = swing(Jt, clavF(Cp), Ct);
-    // Twist sense: positive turns the sleeve's top toward its back, as pcm.js's
-    // TWIST (content from phi + TWIST, phi + toward the front). Up/forward
-    // round the arm are named directions here, so the cross product is safe.
+    // Twist sense: positive turns the sleeve's top toward its back (a point
+    // at phi takes the content from phi + twist, phi + toward the front).
+    // Up/forward round the arm are named directions here, so the cross
+    // product is safe.
     const up = perp(fp.U, A), fw = perp(fp.F, A), k = norm(cross(up, fw));
     const armT = (p) => { const y = arm(clavF(p)), t = dot(sub(y, Jt), A) / len;
       return twist ? add(Jt, rotAxis(k, -twist * smooth(0, 1, t))(sub(y, Jt))) : y; };

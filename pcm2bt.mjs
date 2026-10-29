@@ -12,6 +12,9 @@
 // before drawing the jersey, so that shows as bare arm.
 // TWIST (degrees, default 0) turns the sleeve content round the arm, top
 // toward the back, from none at the shoulder to all of it at the cuff.
+// PCM_CLIP poses PCM's rider with one of its viewer's clips first (loop,
+// riding; idle, standing; bind, the default: the mesh as stored), at time
+// PCM_T seconds (default 0); see src/pcm.js.
 // DEBUG=1 also writes OUT-reposed.json, the reposed PCM mesh for
 // debug/pcmrender.mjs, and OUT-hits.png, how each texel found PCM's surface
 // (green by ray, darker the further; magenta the nearest point).
@@ -72,7 +75,7 @@ for (const k of ['l', 'r']) console.log(`  cuff stretch ${k}, phi -180..135 by 4
 
 if (process.env.DEBUG) {
   const d = JSON.parse(readFileSync(pcmPath));
-  writeFileSync(outPath.replace(/\.png$/, '-reposed.json'), JSON.stringify({ ...d, position: look.repose.P }));
+  writeFileSync(outPath.replace(/\.png$/, '-reposed.json'), JSON.stringify({ ...d, position: look.repose.P, clips: undefined }));
   // How each texel was found: green by ray (darker the further), magenta the nearest point.
   paint(({ p, n, x, y }) => { look(p, n, wAt(x, y)); const k = 1 - Math.min(1, look.dist / 0.08) * 0.7;
     return look.how === 'near' ? [255, 0, 255] : [40 * k, 220 * k, 60 * k]; }, outPath.replace(/\.png$/, '-hits.png'));

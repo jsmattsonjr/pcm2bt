@@ -7,7 +7,11 @@ Writes OUTDIR/pcm_cyclist.json for the SkinnedMeshRenderer whose mesh is
 cyclist_jersey: positions (mesh space, bind pose, z up), UVs (v up, as Unity
 stores them), triangles (the strip unrolled, degenerates dropped), each
 vertex's four bone indices and weights, and per bone its name and the inverse
-bind pose (bone -> mesh space, row-major 4x4). Also OUTDIR/pcm_default.png
+bind pose (bone -> mesh space, row-major 4x4), and the viewer's animation
+clips ("idle", standing; "loop", riding) as keyframed local rotation (x y z
+w), position and scale per node, keyed by the node's path from the
+animated root, each key [time, value, inSlope, outSlope] as Unity's Hermite
+curves store them. Also OUTDIR/pcm_default.png
 (the 455x313 sunmaillot kit) and, for reference, the body mesh 'Cyclist' in
 the same form under "body".
 """
@@ -67,6 +71,19 @@ def skinned(renderer):
     }
 
 
+def clip(c):
+    """An AnimationClip, read by typetree (UnityPy has no class for Unity 2.5's)."""
+    t = c.read_typetree()
+    nodes = {}
+    for kind, field, axes in (('rot', 'm_RotationCurves', 'xyzw'), ('pos', 'm_PositionCurves', 'xyz'),
+                              ('scale', 'm_ScaleCurves', 'xyz')):
+        for cv in t[field]:
+            nodes.setdefault(cv['path'], {})[kind] = [
+                [k['time'], [k['value'][a] for a in axes], [k['inSlope'][a] for a in axes],
+                 [k['outSlope'][a] for a in axes]] for k in cv['curve']['m_Curve']]
+    return t['m_Name'], {'rate': t['m_SampleRate'], 'nodes': nodes}
+
+
 def texture(t):
     """UnityPy has no Texture2D class for Unity 2.5, so decode the top mip of
     a DXT1/DXT5 texture here. Blocks pad the size to a multiple of 4, and
@@ -83,8 +100,12 @@ def texture(t):
 
 def main(bundle, outdir):
     env = UnityPy.load(bundle)
-    meshes = {}
+    meshes, clips = {}, {}
     for o in env.objects:
+        if o.type.name == 'AnimationClip':
+            name, c = clip(o)
+            clips[name] = c
+            print(f'clip {name}: {len(c["nodes"])} nodes')
         if o.type.name == 'SkinnedMeshRenderer':
             r = o.read()
             m = skinned(r)
@@ -95,6 +116,7 @@ def main(bundle, outdir):
                 texture(t).save(f'{outdir}/pcm_default.png')
                 print(f'pcm_default.png: {t.m_Name} {t.m_Width}x{t.m_Height}')
     out = dict(meshes['cyclist_jersey'])
+    out['clips'] = clips
     out['body'] = meshes.get('Cyclist')
     with open(f'{outdir}/pcm_cyclist.json', 'w') as f:
         json.dump(out, f)

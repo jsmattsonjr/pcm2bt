@@ -165,7 +165,7 @@ export function repose(pcm, skin, bt, twist = 0, cut = null) {
   // of the projection.
   const collar = (t) => t.every((v) => { const [th, z, r] = polar(pcm.P[v]); return z > np(th) + 0.002 && r < cb.r(th); });
 
-  const d = skin.bones.map((b) => ({ name: b.name, at: [b.toMesh[0][3], b.toMesh[1][3], b.toMesh[2][3]] }));
+  const d = skin.bones.map((b) => ({ name: b.name, at: pcm.boneAt(b.name) }));   // posed origins
   const bone = (n) => d.find((b) => b.name.endsWith(n));
   const fn = d.map(() => torso), target = { joint: {}, cuff: {} };
   for (const s of ['l', 'r']) {

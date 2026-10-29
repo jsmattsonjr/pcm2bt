@@ -122,29 +122,80 @@ export function frames(mesh) {
 
 // Boundary segments of a triangle set, keyed by position (UV seams split
 // vertices): edges used by one triangle, and edges whose two triangles are
-// in different classes. pt(i) -> point, cls(t) -> class of triangle t.
-export function edgesOf(tris, pt, cls) {
+// in different classes. pt(i) -> point, cls(t) -> class of triangle t; out(i)
+// -> the point to report (pt by default).
+export function edgesOf(tris, pt, cls, out = pt) {
   const key = (i) => pt(i).map((q) => q.toFixed(4)).join(), E = new Map();
   tris.forEach((t, k) => { for (let e = 0; e < 3; e++) {
     const a = t[e], b = t[(e + 1) % 3], ka = key(a), kb = key(b), id = ka < kb ? ka + '|' + kb : kb + '|' + ka;
-    const o = E.get(id); if (o) { o.n++; o.cls.add(cls(k)); } else E.set(id, { a: pt(a), b: pt(b), n: 1, cls: new Set([cls(k)]) });
+    const o = E.get(id); if (o) { o.n++; o.cls.add(cls(k)); } else E.set(id, { a: out(a), b: out(b), n: 1, cls: new Set([cls(k)]) });
   } });
   return [...E.values()];
 }
 
-// The PCM rider (assets/pcm_cyclist.json from pcm-extract.py). The kit mesh
-// is jersey and shorts in one: the jersey is everything above the hem's edge
-// loop, kit row 341.5 of 626 (v > HEM_V).
+// 4x4 row-major matrices: product, affine inverse, and a point through one.
+const mul4 = (a, b) => a.map((r, i) => r.map((_, j) => r[0]*b[0][j] + r[1]*b[1][j] + r[2]*b[2][j] + r[3]*b[3][j]));
+function inv4(m) {
+  const [[a, b, c], [d, e, f], [g, h, k]] = m, det = a*(e*k - f*h) - b*(d*k - f*g) + c*(d*h - e*g);
+  const r = [[e*k - f*h, c*h - b*k, b*f - c*e], [f*g - d*k, a*k - c*g, c*d - a*f], [d*h - e*g, b*g - a*h, a*e - b*d]].map((row) => row.map((q) => q / det));
+  const t = [0, 1, 2].map((i) => -(r[i][0]*m[0][3] + r[i][1]*m[1][3] + r[i][2]*m[2][3]));
+  return [[...r[0], t[0]], [...r[1], t[1]], [...r[2], t[2]], [0, 0, 0, 1]];
+}
+const apply4 = (m, p) => [0, 1, 2].map((i) => m[i][0]*p[0] + m[i][1]*p[1] + m[i][2]*p[2] + m[i][3]);
+
+// A Unity curve's value at time t: Hermite between keys [time, value,
+// inSlope, outSlope], clamped outside them.
+function sample(keys, t) {
+  if (t <= keys[0][0]) return keys[0][1];
+  if (t >= keys.at(-1)[0]) return keys.at(-1)[1];
+  const i = keys.findIndex((k) => k[0] > t) - 1, [t0, p0, , m0] = keys[i], [t1, p1, m1] = keys[i + 1], dt = t1 - t0, x = (t - t0) / dt;
+  const h00 = 2*x**3 - 3*x**2 + 1, h10 = x**3 - 2*x**2 + x, h01 = -2*x**3 + 3*x**2, h11 = x**3 - x**2;
+  return p0.map((_, c) => h00*p0[c] + h10*dt*m0[c] + h01*p1[c] + h11*dt*m1[c]);
+}
+// The skinning matrices (mesh space -> mesh space) of PCM's bones in a viewer
+// clip at time t: Unity's bone world matrix (each node's T R S under its
+// parent's, along its path) times its bind pose, re-expressed so the pelvis
+// keeps its place in mesh space. -> [matrix per d.bones].
+export function clipPose(d, clip, t) {
+  const W = new Map(), world = (path) => {
+    if (W.has(path)) return W.get(path);
+    const c = clip.nodes[path], cut = path.lastIndexOf('/'), parent = cut < 0 ? null : world(path.slice(0, cut));
+    let [x, y, z, w] = sample(c.rot, t); const l = Math.hypot(x, y, z, w); x /= l; y /= l; z /= l; w /= l;
+    const p = c.pos ? sample(c.pos, t) : [0, 0, 0], s = c.scale ? sample(c.scale, t) : [1, 1, 1];
+    const R = [[1 - 2*(y*y + z*z), 2*(x*y - z*w), 2*(x*z + y*w)], [2*(x*y + z*w), 1 - 2*(x*x + z*z), 2*(y*z - x*w)], [2*(x*z - y*w), 2*(y*z + x*w), 1 - 2*(x*x + y*y)]];
+    const m = [...R.map((r, i) => [r[0]*s[0], r[1]*s[1], r[2]*s[2], p[i]]), [0, 0, 0, 1]];
+    W.set(path, parent ? mul4(parent, m) : m); return W.get(path);
+  };
+  const paths = Object.keys(clip.nodes);
+  const skin = d.bones.map((b) => mul4(world(paths.find((q) => q.split('/').at(-1) === b.name)), inv4(b.toMesh)));
+  const X = inv4(skin[d.bones.findIndex((b) => b.name.endsWith('Pelvis'))]);
+  return skin.map((m) => mul4(X, m));
+}
+
+// The PCM rider (assets/pcm_cyclist.json from pcm-extract.py), in its bind
+// pose (PCM_CLIP=bind, the default) or posed by one of the viewer's clips at
+// time PCM_T (loop, riding; idle). Each clip is within a few degrees of the
+// bind pose at every jersey bone (upper arms 4-7, torso 1-15), so the choice
+// barely changes the result. The kit mesh is jersey and shorts in one:
+// the jersey is everything above the hem's edge loop, kit row 341.5 of 626
+// (v > HEM_V). Boundaries are welded by bind-pose position. boneAt(name) ->
+// a bone's posed origin.
 export const HEM_V = 1 - 341.5 / 626;
-export function loadPCM(path) {
+export const PCM_CLIP = process.env.PCM_CLIP || 'bind', PCM_T = Number(process.env.PCM_T || 0);
+export function loadPCM(path, clipName = PCM_CLIP, t = PCM_T) {
   const d = JSON.parse(readFileSync(path));
-  const P = d.position, UV = d.uv, bone = (n) => d.bones.findIndex((b) => b.name.endsWith(n));
-  const at = (n) => { const m = d.bones[bone(n)].toMesh; return [m[0][3], m[1][3], m[2][3]]; };
+  if (clipName !== 'bind' && !d.clips) throw new Error(`PCM_CLIP=${clipName}: ${path} has no clips; rerun ./fetch-pcm.zsh`);
+  if (clipName !== 'bind' && !d.clips[clipName]) throw new Error(`PCM_CLIP=${clipName}: ${Object.keys(d.clips).join(', ')} or bind`);
+  const posed = clipName !== 'bind' && d.clips, K = posed ? clipPose(d, d.clips[clipName], t) : d.bones.map(() => [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]);
+  const P = !posed ? d.position : d.position.map((p, v) => { let o = [0, 0, 0];
+    d.boneIndex[v].forEach((b, k) => { if (d.boneWeight[v][k]) o = add(o, apply4(K[b], p), d.boneWeight[v][k]); }); return o; });
+  const UV = d.uv, bone = (n) => d.bones.findIndex((b) => b.name.endsWith(n));
+  const at = (n) => { const b = bone(n), m = d.bones[b].toMesh; return apply4(K[b], [m[0][3], m[1][3], m[2][3]]); };
   const wt = (v, n) => { const b = bone(n); return d.boneIndex[v].reduce((s, i, k) => s + (i === b ? d.boneWeight[v][k] : 0), 0); };
   const ua = P.map((_, v) => ({ l: wt(v, 'L_UpperArm'), r: wt(v, 'R_UpperArm') }));
   const tris = d.submeshes[0].filter((t) => t.reduce((s, v) => s + UV[v][1], 0) / 3 > HEM_V);
   const all = d.submeshes[0], below = (t) => t.reduce((s, v) => s + UV[v][1], 0) / 3 <= HEM_V;
-  const edges = edgesOf(all, (i) => P[i], (k) => below(all[k]) ? 'shorts' : 'jersey');
+  const edges = edgesOf(all, (i) => d.position[i], (k) => below(all[k]) ? 'shorts' : 'jersey', (i) => P[i]);
   const hem = [], neck = [], cuff = { l: [], r: [] };
   const lJ = at('L_UpperArm'), rJ = at('R_UpperArm'), neckJ = at('Neck');
   for (const e of edges) {
@@ -155,9 +206,10 @@ export function loadPCM(path) {
     }
   }
   // Mesh space is z up with the rider facing -y (the head is forward of the
-  // pelvis), torso leaning about 58 degrees, so forward is the chest, facing down.
+  // pelvis), torso leaning about 58 degrees in the bind pose, so forward is the
+  // chest, facing down; the clips move the torso about the fixed pelvis.
   const mesh = { hem, neck, cuff, joint: { l: lJ, r: rJ }, left: sub(lJ, rJ), fwd: [0, -1, 0] };
-  return { P, UV, ua, tris, mesh, fr: frames(mesh) };
+  return { P, UV, ua, tris, mesh, fr: frames(mesh), boneAt: at };
 }
 
 // The kit pixels PCM's jersey triangles touch (rasterised at 4x, so edge

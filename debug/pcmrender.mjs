@@ -1,6 +1,7 @@
 // The PCM rider wearing a kit, rendered in software so it can be set beside
 // render.zsh's Biketerra rider: the cyclist_jersey mesh (jersey and shorts)
-// in its bind pose, orthographic, z-buffered, flat-shaded, kit sampled
+// in the pose PCM_CLIP gives it (as pcm2bt.mjs: bind, the default; loop; idle),
+// orthographic, z-buffered, flat-shaded, kit sampled
 // nearest. The raw mesh is mirrored (README, The PCM rider), so the image is
 // flipped back: lettering reads as in the game.
 //   node debug/pcmrender.mjs OUT.png FWD LEFT UP [KIT.png] [MESH.json]
@@ -32,7 +33,7 @@ const proj = (p) => { const q = sub(p, C); return [S / 2 - dot(q, right) * scale
 const zb = new Float32Array(S * S).fill(-Infinity), im = { width: S, height: S, data: new Uint8ClampedArray(S * S * 4).fill(255) };
 const light = norm([0, 1, 2].map((i) => cam[i] + up[i] * 0.5));
 for (const t of d.submeshes[0]) {
-  const P = t.map((v) => d.position[v]), sh = 0.35 + 0.65 * Math.abs(dot(norm(cross(sub(P[1], P[0]), sub(P[2], P[0]))), light));
+  const P = t.map((v) => pcm.P[v]), sh = 0.35 + 0.65 * Math.abs(dot(norm(cross(sub(P[1], P[0]), sub(P[2], P[0]))), light));
   const sp = P.map(proj);
   rasterTriangle(...sp.flatMap((q) => [q[0], q[1]]), S, S, (x, y, ...bc) => {
     const z = bc[0] * sp[0][2] + bc[1] * sp[1][2] + bc[2] * sp[2][2], k = y * S + x; if (z <= zb[k]) return; zb[k] = z;

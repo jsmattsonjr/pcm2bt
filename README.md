@@ -97,6 +97,17 @@ is the edge loop at kit row 341.5 of 626. The mesh's x is mirrored (the L
 bones are at −x), so every direction is taken from bone names, never a cross
 product: the LKHC kit's lettering reads correctly on Biketerra's rider.
 
+The bundle also holds the viewer's two animation clips, `idle` (standing)
+and `loop` (riding, one pedal stroke in 0.67 s), which `pcm-extract.py`
+exports into the JSON (`clips`). `PCM_CLIP=loop|idle` poses PCM's rider with
+one, at `PCM_T` seconds, before the repose, in `pcm2bt.mjs` and
+`debug/pcmrender.mjs` alike; the default, `bind`, is the mesh as stored. At
+every bone the jersey is skinned to, either clip is within a few degrees
+of the bind pose (upper arms 4–7°, torso 1–15°), so it barely changes the
+result. The viewer is Unity, left-handed: there the L bones are the
+rider's left, unmirrored, and its camera faces the rider, so the rider's
+left sleeve shows on the right of the screen.
+
 ## Correspondence
 
 `src/project.js`. The two UV maps are unrelated, so PCM's jersey is reposed

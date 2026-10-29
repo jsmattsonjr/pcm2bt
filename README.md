@@ -19,11 +19,35 @@ node pcm2bt.mjs KIT.png OUT.png       # about 10 s
 By default Biketerra's sleeves (0.20 m from shoulder joint to cuff) are cut to
 PCM's length (~0.14 m), so sleeve art keeps PCM's proportions; `SLEEVE=0.16`
 cuts them to a length in metres instead, and `SLEEVE=full` keeps Biketerra's
-own, PCM's sleeve stretched to fit. Below the cut the atlas is transparent:
+own: nothing is cut, and PCM's sleeve is stretched along the arm to reach
+Biketerra's cuff, so sleeve art comes out about half as long again (the cuff
+band still runs along the real hem). Below a cut the atlas is transparent:
 the site fills the texture with the rider's skin colour before drawing the
 jersey, so that shows as bare arm, in whatever skin tone the rider has set.
 
 Kits for UE5 / modern PCM use another map and are out of scope.
+
+## Environment variables
+
+All optional; the defaults are what the converter is tuned for.
+
+| Variable | Default | Read by | What |
+|---|---|---|---|
+| `SLEEVE` | `pcm` | `pcm2bt.mjs` | Sleeve length: `pcm` (PCM's, ~0.14 m), `full` (Biketerra's, 0.20 m, PCM's stretched), or metres. Above. |
+| `PCM_MESH` | `pcmmod` | `pcm2bt.mjs`, `pcmrender` | PCM rider projected from: `pcmmod` (pcmmod.com's) or `jview` (PCM.daily's). See The PCM riders. |
+| `PCM_CLIP` | `bind` | `pcm2bt.mjs`, `pcmrender` | With `PCM_MESH=jview`: pose PCM.daily's rider with its viewer clip `loop` or `idle` first. |
+| `PCM_T` | `0` | `pcm2bt.mjs`, `pcmrender` | Seconds into `PCM_CLIP`. |
+| `TWIST` | `0` | `pcm2bt.mjs` | Degrees to turn the sleeve content round the arm, top toward the back, tapering in from the shoulder. |
+| `TMAX` | `0.08` | `pcm2bt.mjs` | How far (m) the projection casts each way along the normal. |
+| `LAMBDA` | `0.08` | `pcm2bt.mjs` | Cost (m) per unit of upper-arm skin-weight mismatch when scoring hits. |
+| `MISS` | `1` | `pcm2bt.mjs` | Weight mismatch past which a hit is rejected in favour of the nearest point. |
+| `DEBUG` | unset | `pcm2bt.mjs` | `1` also writes `OUT-reposed.json` and `OUT-hits.png`. See Correspondence. |
+| `POSE` | `seated` | `pcm2bt.mjs`, `render.zsh` | Biketerra pose to paint in and render: `seated`, `standing`, `stopped` or `bind` (`src/pose.js`). |
+| `T` | `0` | `pcm2bt.mjs`, `render.zsh` | Seconds into the pedalling clip for `seated` and `standing`. |
+| `SIZE` | `700` | `render.zsh` | Pixel size of each contact-sheet tile. |
+| `BASIC` | unset | `render.zsh` | `1` renders unlit, so colours read as the atlas holds them. |
+| `CHROME` | macOS app | `render.zsh` | Chrome binary for the headless render. |
+| `PYTHON` | `.venv`, else `python3` | the zsh scripts | Python with Pillow (and numpy, UnityPy for `fetch-pcm.zsh`). See Requirements. |
 
 ## Requirements
 

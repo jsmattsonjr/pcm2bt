@@ -172,11 +172,14 @@ export function frames(mesh) {
       const [ph] = raw(p);
       // Allow the top of the shoulder (cos(ph) > 0) to reach slightly inboard of J,
       // while keeping the front chest and back strictly masked out.
+      // The lateral test only holds near the joint: Biketerra's seated arms
+      // reach forward, so the front of the upper arm lies no further out than
+      // J, and failing it there made that sleeve torso (and, counted in the
+      // torso slices below, pushed the upper chest's theta round to the side).
       const lat = sg * dot(q, L) + 0.035 * Math.max(0, Math.cos(ph));
-      if (lat < -0.015) return 0;
       const sNorm = (t - t0(ph)) / (tc(ph) - t0(ph));
       const wRadial = 1 - smooth(0.075, 0.11, r);
-      const wLat = smooth(-0.015, 0.015, lat);
+      const wLat = Math.max(smooth(-0.015, 0.015, lat), smooth(0.25, 0.45, sNorm));
       return smooth(-0.02, 0.12, sNorm) * wRadial * wLat;
     };
   }

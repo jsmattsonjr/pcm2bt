@@ -128,6 +128,8 @@ function facingProfile(surface, side, raw, basis, sOf) {
     return wrap(at[j + 1] + (at[j + 2] - at[j + 1]) * t); };
 }
 
+const JOINT_TH = Number(process.env.JOINT_TH ?? 62) * Math.PI / 180, E_WARP0 = Number(process.env.E_WARP0 ?? 0.4);
+
 // Geometric sleeve weight & coordinates from the shoulder joint J to cuff:
 // avoids the PCM vs Biketerra deltoid skin-weight mismatch where PCM weights
 // the upper sleeve ("Sunweb"/"PROJOB") to the torso bones.
@@ -237,7 +239,21 @@ export function frames(mesh) {
     return [th, zc - 0.20 * Math.max(0, zc) * (r / torsoLen)];
   };
   const eh = profile(mesh.hem, torsoRaw), en = profile(mesh.neck, torsoRaw);
-  const torso = (p) => { const [th, e] = torsoRaw(p), a = eh(th); return [th, (e - a) / (en(th) - a)]; };
+  const torso0 = (p) => { const [th, e] = torsoRaw(p), a = eh(th); return [th, (e - a) / (en(th) - a)]; };
+  // The shoulder joints sit at different theta on the two riders (PCM +-53
+  // degrees, Biketerra's seated pose +-71), while the sleeves hang off the
+  // joints: unaligned, the torso content beside the shoulder ran 18 degrees
+  // out of step with the sleeve's, and a logo that crosses from sleeve to
+  // yoke (PCM's shoulder "Sunweb", which curves up to the neck) lost its
+  // yoke end. So theta is warped piecewise linearly, front and back of each
+  // joint, to put the joint at JOINT_TH, fully from the joint's height up and
+  // fading out to none at E_WARP0.
+  const jt = Object.fromEntries(['l', 'r'].map((s) => [s, torso0(mesh.joint[s])]));
+  const torso = (p) => {
+    const [th, e] = torso0(p), [tj, ej] = jt[th >= 0 ? 'l' : 'r'], a = Math.abs(th), aj = Math.abs(tj);
+    const w = a <= aj ? a * JOINT_TH / aj : JOINT_TH + (a - aj) * (Math.PI - JOINT_TH) / (Math.PI - aj);
+    return [th + Math.sign(th) * (w - a) * smooth(E_WARP0, ej, e), e];
+  };
 
   return {
     C, U, F, L, torso,

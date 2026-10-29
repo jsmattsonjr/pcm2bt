@@ -42,9 +42,18 @@ export async function createPreview(container, glbUrl) {
   scene.add(gltf.scene);
 
   function setJersey(imageData) {
+    // As applyRiderDesign: skin colour first, the jersey drawn over it, so
+    // transparent texels show skin.
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, 512, 512);
-    if (imageData) ctx.putImageData(imageData, 0, 0);
+    ctx.fillStyle = PALETTE[0];
+    ctx.fillRect(0, 32, 512, 480);
+    if (imageData) {
+      const tmp = document.createElement('canvas');
+      tmp.width = tmp.height = 512;
+      tmp.getContext('2d').putImageData(imageData, 0, 0);
+      ctx.drawImage(tmp, 0, 0);
+    }
     PALETTE.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(i * 32, 0, 32, 32); });
     texture.needsUpdate = true;
   }

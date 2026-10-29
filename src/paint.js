@@ -3,7 +3,9 @@
 // texels average only the triangle covering most of them, sliver triangles
 // are coloured from their own 3D position, and islands bleed 4 px at seams
 // (as in jersey-projector's one-offs).
-//   colour({ part, p, n, loc, nl, x, y }) -> [r, g, b]
+//   colour({ part, p, n, loc, nl, x, y }) -> [r, g, b] or [r, g, b, a]
+// (a 0-255, default 255: the site fills the texture with the rider's skin
+// colour before drawing the jersey, so a transparent texel shows skin).
 // part is 'l' or 'r' (sleeve islands, u < 0.31 is the left) or 't' (torso);
 // p, n are posed world position and unit normal; loc, nl the same in the
 // sleeve's upperArm bone frame; x, y atlas px.
@@ -35,6 +37,8 @@ const sleevePt = (s, w, nw, x, y) => {
 
 export function paint(colour, outPath) {
   const rgb = new Float32Array(S * S * 3), cnt = new Float32Array(S * S);
+  // Alpha in channel 0 of a second buffer, bled and filled as rgb is.
+  const ab = new Float32Array(S * S * 3), A = (c) => c[3] ?? 255;
   // Sleeves: vote for the triangle covering most of each texel (UV-area weighted).
   const J = rig.jerseyTris, U = glb.uv, P = sm.P, Nw = sm.N;
   const triUV = new Float32Array(J.length / 3);
@@ -49,7 +53,7 @@ export function paint(colour, outPath) {
     for (let j = 0; j < SS; j++) for (let i = 0; i < SS; i++) {
       const k = (ty*SS+j)*N + tx*SS+i; if (!sm.side[k] || sm.tri[k] !== best) continue;
       const c = colour(sleevePt(sm.side[k] === 1 ? 'l' : 'r', g3(sm.wpos, k), g3(sm.nrm, k), (tx*SS+i+.5)/SS, (ty*SS+j+.5)/SS));
-      rgb[t*3] += c[0]; rgb[t*3+1] += c[1]; rgb[t*3+2] += c[2]; cnt[t]++;
+      rgb[t*3] += c[0]; rgb[t*3+1] += c[1]; rgb[t*3+2] += c[2]; ab[t*3] += A(c); cnt[t]++;
     }
   }
   // Slivers (UV altitude under 2.5 texels): each texel a sliver touches takes
@@ -75,7 +79,7 @@ export function paint(colour, outPath) {
       const w = [0,1,2].map((c) => b[0]*P[vi[0]*3+c] + b[1]*P[vi[1]*3+c] + b[2]*P[vi[2]*3+c]);
       const nw = [0,1,2].map((c) => b[0]*Nw[vi[0]*3+c] + b[1]*Nw[vi[1]*3+c] + b[2]*Nw[vi[2]*3+c]);
       const c = colour(sleevePt(sd, w, nw, sx / n, sy / n)), k = ty*S + tx;
-      rgb[k*3] = c[0]; rgb[k*3+1] = c[1]; rgb[k*3+2] = c[2]; cnt[k] = 1;
+      rgb[k*3] = c[0]; rgb[k*3+1] = c[1]; rgb[k*3+2] = c[2]; ab[k*3] = A(c); cnt[k] = 1;
     }
   }
   // Torso.
@@ -83,25 +87,25 @@ export function paint(colour, outPath) {
     const k = y*N + x; if (!tm.on[k]) continue;
     const c = colour({ part: 't', p: g3(tm.wpos, k), n: norm(g3(tm.nrm, k)), x: (x+.5)/SS, y: (y+.5)/SS });
     const t = (y >> 2) * S + (x >> 2);
-    rgb[t*3] += c[0]; rgb[t*3+1] += c[1]; rgb[t*3+2] += c[2]; cnt[t]++;
+    rgb[t*3] += c[0]; rgb[t*3+1] += c[1]; rgb[t*3+2] += c[2]; ab[t*3] += A(c); cnt[t]++;
   }
   const known = new Uint8Array(S * S);
-  for (let t = 0; t < S * S; t++) if (cnt[t]) { known[t] = 1; for (let c = 0; c < 3; c++) rgb[t*3+c] /= cnt[t]; }
+  for (let t = 0; t < S * S; t++) if (cnt[t]) { known[t] = 1; for (let c = 0; c < 3; c++) rgb[t*3+c] /= cnt[t]; ab[t*3] /= cnt[t]; }
   const tmask = templateMask(readPNG(R + 'assets/jersey-mask.png'), S);
   const region = new Uint8Array(S * S);
   for (let t = 32 * S; t < S * S; t++) region[t] = tmask[t];
   const dist = new Int8Array(S * S).fill(-1);
   for (const box of [[0, 32, 319, 224], [0, 225, S - 1, S - 1]]) {
-    const d = bleed(rgb, known, S, box);
+    const d = bleed(rgb, known, S, box); bleed(ab, known, S, box);
     for (let y = box[1]; y <= box[3]; y++) for (let x = box[0]; x <= box[2]; x++) if (d[y*S+x] > 0) dist[y*S+x] = d[y*S+x];
   }
   for (let t = 0; t < S * S; t++) if (dist[t] > 0) { known[t] = 1; region[t] = 1; }
-  fillRegion(rgb, known, region, S, S);
+  fillRegion(rgb, known, region, S, S); fillRegion(ab, known, region, S, S);
   const out = new Uint8ClampedArray(S * S * 4);
   for (let t = 0; t < S * S; t++) {
     const on = region[t] || known[t];
     for (let c = 0; c < 3; c++) out[t*4+c] = on ? Math.round(rgb[t*3+c]) : 0;
-    out[t*4+3] = 255;
+    out[t*4+3] = on ? Math.round(ab[t*3]) : 255;
   }
   writePNG(outPath, { width: S, height: S, data: out });
 }

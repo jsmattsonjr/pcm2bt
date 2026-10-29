@@ -9,7 +9,8 @@
 // should give the former.
 // MAP=project maps by repose and project (src/project.js) instead of the
 // canonical body; TWIST then defaults to 0. With DEBUG=1 it also writes
-// OUT-reposed.json, the reposed PCM mesh for debug/pcmrender.mjs.
+// OUT-reposed.json, the reposed PCM mesh for debug/pcmrender.mjs, and
+// OUT-hits.png, how each texel found PCM's surface (green by ray, magenta nearest).
 import { readPNG, writePNG } from './src/png.js';
 import { rasterTriangle } from './src/view.js';
 import { frames, edgesOf, loadPCM, pcmMatch, canon, lerp, sampleKit, kitMask } from './src/pcm.js';
@@ -68,16 +69,21 @@ for (const t of tris) {
 const wAt = (x, y) => { const k = Math.min(N - 1, Math.floor(y * 4)) * N + Math.min(N - 1, Math.floor(x * 4)); return { l: wmap.l[k], r: wmap.r[k] }; };
 const kit = readPNG(kitPath), mask = kitMask(pcm, kit.width, kit.height);
 const bare = (p) => { if (!SLEEVE) return false; const g = fr.weight(p), s = g.l >= g.r ? 'l' : 'r'; return g[s] > 0.5 && sleeve(s, p)[1] > 1; };
-const look = MAP === 'project' && projector(pcm, JSON.parse(readFileSync(R + 'assets/pcm_cyclist.json')), bt, TWIST);
+const look = MAP === 'project' && projector(pcm, JSON.parse(readFileSync(R + 'assets/pcm_cyclist.json')), bt, TWIST, fr.cut);
 paint(({ p, n, x, y }) => bare(p) ? [0, 0, 0, 0] : sampleKit(kit, ...(look ? look(p, n, wAt(x, y)) : match(canon(fr, p, wAt(x, y)))), mask), outPath);
 if (look) {
   const t = look.stats.t.sort((a, b) => a - b), q = (f) => (t[Math.floor(f * (t.length - 1))] * 100).toFixed(1);
   console.log(`project: ${look.stats.ray} by ray, ${look.stats.near} nearest; distance cm p50 ${q(0.5)} p90 ${q(0.9)} p99 ${q(0.99)} max ${q(1)}`);
+  const cs = look.repose.target.cuffScale;
+  if (cs) for (const k of ['l', 'r']) console.log(`  cuff stretch ${k}, phi -180..135 by 45: ${cs[k].map((x) => x.toFixed(2)).join(' ')}; cuff off the cut by at most ${(look.repose.target.cuffMiss[k] * 100).toFixed(2)} cm`);
 }
 
 if (process.env.DEBUG && look) {
   const d = JSON.parse(readFileSync(R + 'assets/pcm_cyclist.json'));
   writeFileSync(outPath.replace(/\.png$/, '-reposed.json'), JSON.stringify({ ...d, position: look.repose.P }));
+  // How each texel was found: green by ray (darker the further), magenta the nearest point.
+  paint(({ p, n, x, y }) => { look(p, n, wAt(x, y)); const k = 1 - Math.min(1, look.dist / 0.08) * 0.7;
+    return look.how === 'near' ? [255, 0, 255] : [40 * k, 220 * k, 60 * k]; }, outPath.replace(/\.png$/, '-hits.png'));
 }
 if (process.env.DEBUG && !look) {
   // Canonical position as colour (red forward, green left, blue up, banded

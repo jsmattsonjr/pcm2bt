@@ -18,13 +18,23 @@
 // - upper arms (PCM has no forearm bones; the sleeve is all upper arm): then
 //   turned and stretched about the joint so the cuff centroid lands on
 //   Biketerra's (bt.sleeveLen shortens it, as pcm.js does), and twisted
-//   TWIST round the arm, nothing at the joint to all of it at the cuff.
+//   TWIST round the arm, nothing at the joint to all of it at the cuff. Then
+//   stretched along the arm per angle round it, so PCM's cuff loop lands on
+//   Biketerra's cut (pcm.js frames().cut, where pcm2bt.mjs turns texels
+//   transparent) all round: PCM's cuff is tilted ~2 cm (long at the back and
+//   outside, short at the front and inside), Biketerra's cut nearly square,
+//   so with only the centroids matched the cuff band climbed toward the
+//   inner arm.
 //
 // Projection: from a Biketerra point both ways along its normal up to TMAX,
 // scoring each hit |t| + LAMBDA x the mismatch of upper-arm skin weights
 // (|dl| + |dr|), so a torso point won't take the sleeve's sheet in the armpit
-// but the armhole stays continuous. With no hit, or none within 0.5 of
-// mismatch, the nearest point by the same score.
+// but the armhole stays continuous. With no hit, or the best over MISS
+// (default 1) of mismatch, the nearest point by the same score. At 0.5 the
+// armhole's front and back creases fell back (PCM weights its upper sleeve
+// to the torso further down the arm than Biketerra does), and the nearest
+// point there was off-panel blobs; at 1 only the sleeve beyond the cut
+// (transparent) and odd texels at the hem and neck still fall back.
 import { lerp } from './pcm.js';
 
 const sub = (a, b) => [a[0]-b[0], a[1]-b[1], a[2]-b[2]], dot = (a, b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
@@ -34,7 +44,7 @@ const norm = (a) => { const l = Math.hypot(...a); return a.map((q) => q / l); };
 const perp = (a, ...bs) => norm(bs.reduce((v, b) => add(v, b, -dot(v, b)), a));
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const TAU = 2 * Math.PI, wrap = (a) => a - TAU * Math.floor((a + Math.PI) / TAU);
-export const TMAX = Number(process.env.TMAX ?? 0.08), LAMBDA = Number(process.env.LAMBDA ?? 0.08);
+export const TMAX = Number(process.env.TMAX ?? 0.08), LAMBDA = Number(process.env.LAMBDA ?? 0.08), MISS = Number(process.env.MISS ?? 1);
 
 function centroid(segs) {
   let w = 0, c = [0, 0, 0];
@@ -49,28 +59,32 @@ function frameOf(mesh) {
   return { H, U, L, F, len: Math.hypot(...sub(Nk, H)) };
 }
 
-// A loop's height along fr.U as a function of the angle round it (72 bins,
-// sampled every 2 mm, gaps interpolated round the circle). map carries the
-// loop's points into fr's space first.
-function loopHeight(segs, fr, map = (p) => p) {
-  const B = 72, sum = new Float64Array(B), n = new Float64Array(B);
+// A loop as a function of angle: coord(p) -> [angle, value], the mean per
+// bin (B bins, sampled every 2 mm, gaps interpolated round the circle, then
+// averaged over SM bins either side) -> f(angle). map carries the loop's
+// points first.
+function angular(segs, coord, map = (p) => p, B = 72, SM = 0) {
+  const sum = new Float64Array(B), n = new Float64Array(B);
   for (const [a0, b0] of segs) {
     const a = map(a0), b = map(b0), k = Math.max(1, Math.ceil(Math.hypot(...sub(b, a)) / 0.002));
     for (let i = 0; i <= k; i++) {
-      const q = sub(add(a, sub(b, a), i / k), fr.H), j = Math.floor((wrap(Math.atan2(dot(q, fr.L), dot(q, fr.F))) + Math.PI) / TAU * B) % B;
-      sum[j] += dot(q, fr.U); n[j]++;
+      const [ang, val] = coord(add(a, sub(b, a), i / k)), j = Math.floor((wrap(ang) + Math.PI) / TAU * B) % B;
+      sum[j] += val; n[j]++;
     }
   }
-  const known = [...n.keys()].filter((j) => n[j]), f = new Float64Array(B);
+  const known = [...n.keys()].filter((j) => n[j]), f0 = new Float64Array(B);
   for (let j = 0; j < B; j++) {
-    if (n[j]) { f[j] = sum[j] / n[j]; continue; }
+    if (n[j]) { f0[j] = sum[j] / n[j]; continue; }
     const p = known.findLast((q) => q < j) ?? known.at(-1) - B, q = known.find((q) => q > j) ?? known[0] + B;
     const fp = sum[(p + B) % B] / n[(p + B) % B], fq = sum[q % B] / n[q % B];
-    f[j] = fp + (fq - fp) * (j - p) / (q - p);
+    f0[j] = fp + (fq - fp) * (j - p) / (q - p);
   }
+  const f = f0.map((_, j) => { let s = 0; for (let d = -SM; d <= SM; d++) s += f0[(j + d + B) % B]; return s / (2 * SM + 1); });
   return (th) => { const x = (wrap(th) + Math.PI) / TAU * B - 0.5, j = Math.floor(x), t = x - j;
     return f[(j + B) % B] * (1 - t) + f[(j + 1) % B] * t; };
 }
+// A loop's height along fr.U by the angle round it.
+const loopHeight = (segs, fr, map) => angular(segs, (p) => { const q = sub(p, fr.H); return [Math.atan2(dot(q, fr.L), dot(q, fr.F)), dot(q, fr.U)]; }, map);
 
 // Rotation by angle a about unit axis k (Rodrigues), and the shortest one
 // taking unit a to unit b.
@@ -93,9 +107,10 @@ function swing(o, from, to) {
 
 // pcm: loadPCM(); skin: the parsed pcm_cyclist.json (bones, boneIndex,
 // boneWeight); bt: the Biketerra mesh as pcm2bt.mjs builds it for frames()
-// (hem, neck, cuff, joint, left, fwd, optional sleeveLen). -> { P (reposed
+// (hem, neck, cuff, joint, left, fwd, optional sleeveLen); cut: frames(bt).cut,
+// the cuts to match PCM's cuffs to (none: centroids only). -> { P (reposed
 // positions), G, Gn (Biketerra point / direction -> PCM space), target }.
-export function repose(pcm, skin, bt, twist = 0) {
+export function repose(pcm, skin, bt, twist = 0, cut = null) {
   const fp = frameOf(pcm.mesh), fb = frameOf(bt);
   const Gn = (v) => add(add(fp.F.map((q) => q * dot(v, fb.F)), fp.L, dot(v, fb.L)), fp.U, dot(v, fb.U));
   const G = (p) => add(fp.H, Gn(sub(p, fb.H)));
@@ -124,8 +139,24 @@ export function repose(pcm, skin, bt, twist = 0) {
     // TWIST (content from phi + TWIST, phi + toward the front). Up/forward
     // round the arm are named directions here, so the cross product is safe.
     const up = perp(fp.U, A), fw = perp(fp.F, A), k = norm(cross(up, fw));
-    const armF = (p) => { const y = arm(clavF(p)), t = dot(sub(y, Jt), A) / len;
+    const armT = (p) => { const y = arm(clavF(p)), t = dot(sub(y, Jt), A) / len;
       return twist ? add(Jt, rotAxis(k, -twist * smooth(0, 1, t))(sub(y, Jt))) : y; };
+    let armF = armT;
+    if (cut) {
+      // phi as frames() measures it on Biketerra (its UpArm / FwdArm carried
+      // over by Gn; its A is Biketerra's joint-to-cuff, so Gn(A) is ours), t
+      // from the joint; the axial scale per phi takes PCM's cuff loop, as
+      // reposed so far, to tc(phi). Beyond the joint only.
+      const c = cut[s], Up = Gn(c.UpArm), Fw = Gn(c.FwdArm);
+      const pol = (y) => { const q = sub(y, Jt), t = dot(q, A); return [Math.atan2(dot(q, Fw), dot(q, Up)), t]; };
+      const tp = angular(pcm.mesh.cuff[s], pol, armT, 36, 2);
+      const SC = Array.from({ length: 360 }, (_, j) => { const ph = (j + 0.5) / 360 * TAU - Math.PI; return c.tc(ph) / tp(ph); });
+      const sc = (ph) => { const x = (wrap(ph) + Math.PI) / TAU * 360 - 0.5, j = Math.floor(x), f = x - j; return SC[(j + 360) % 360] * (1 - f) + SC[(j + 1) % 360] * f; };
+      armF = (p) => { const y = armT(p), [ph, t] = pol(y); return t > 0 ? add(y, A, t * (sc(ph) - 1)) : y; };
+      target.cuffScale ??= {}; target.cuffScale[s] = [-180, -135, -90, -45, 0, 45, 90, 135].map((d) => sc(d * Math.PI / 180));
+      const ta = angular(pcm.mesh.cuff[s], pol, armF, 72);
+      target.cuffMiss ??= {}; target.cuffMiss[s] = Math.max(...Array.from({ length: 72 }, (_, j) => { const ph = (j + 0.5) / 72 * TAU - Math.PI; return Math.abs(ta(ph) - c.tc(ph)); }));
+    }
     fn[d.indexOf(bone(`${S}_Clavicle`))] = clavF;
     fn[d.indexOf(bone(`${S}_UpperArm`))] = armF;
   }
@@ -166,8 +197,8 @@ function closest(p, a, b, c) {
 
 // -> look(p, n, w) -> [u, v] of the kit for Biketerra point p, unit normal n
 // and upper-arm weights w { l, r }; look.stats counts how each was found.
-export function projector(pcm, skin, bt, twist = 0) {
-  const rp = repose(pcm, skin, bt, twist), { P, G, Gn } = rp, tris = pcm.tris, ua = pcm.ua, UV = pcm.UV;
+export function projector(pcm, skin, bt, twist = 0, cut = null) {
+  const rp = repose(pcm, skin, bt, twist, cut), { P, G, Gn } = rp, tris = pcm.tris, ua = pcm.ua, UV = pcm.UV;
   // Uniform grid, 2 cm cells; each triangle in every cell its box (grown by
   // half a cell) touches, so sampling a ray every half cell finds it.
   const V = 0.02, cells = new Map(), key = (i, j, k) => (i + 512) * 1048576 + (j + 512) * 1024 + (k + 512);
@@ -193,16 +224,17 @@ export function projector(pcm, skin, bt, twist = 0) {
         if (sc < bs) { bs = sc; bm = m; best = [t, b, Math.abs(h[0])]; }
       }
     }
-    if (!best || bm > 0.5) {
+    if (!best || bm > MISS) {
       bs = Infinity;
       for (const t of tris) {
         const b = closest(p, P[t[0]], P[t[1]], P[t[2]]), dd = Math.hypot(...sub(lerp(t, (v) => P[v], b), p));
         if (dd >= bs) continue;
         const sc = dd + LAMBDA * mism(t, b, w); if (sc < bs) { bs = sc; best = [t, b, dd]; }
       }
-      stats.near++;
-    } else stats.ray++;
+      stats.near++; look.how = 'near';
+    } else { stats.ray++; look.how = 'ray'; }
     if (stats.t.length < 200000) stats.t.push(best[2]);
+    look.dist = best[2];
     return lerp(best[0], (v) => UV[v], best[1]);
   };
   look.stats = stats; look.repose = rp;

@@ -138,7 +138,7 @@ export function frames(mesh) {
   const axis = sub(Nk, H), torsoLen = Math.hypot(...axis);
   const U = axis.map((q) => q / torsoLen), L = perp(mesh.left, U), F = perp(mesh.fwd, U, L);
 
-  const arm = {}, armW = {}, armLens = {};
+  const arm = {}, armW = {}, armLens = {}, cuts = {};
   for (const s of ['l', 'r']) {
     const sg = s === 'l' ? 1 : -1;
     const J = mesh.joint[s], cuffC = centroid(mesh.cuff[s]);
@@ -168,6 +168,8 @@ export function frames(mesh) {
     // s runs 0 to 1 over the shortened sleeve, beyond 1 is bare arm.
     const tc1 = profile(mesh.cuff[s], raw), k = mesh.sleeveLen ? mesh.sleeveLen[s] / armLen : 1, tc = (ph) => tc1(ph) * k;
     armLens[s] = armLen;
+    // The cuff (or SLEEVE cut) as t = tc(phi) along A, phi by position round UpArm/FwdArm: project.js matches PCM's cuff loop to it.
+    cuts[s] = { tc, J, A, UpArm, FwdArm };
 
     // phi = 0 is top of shoulder (starts inboard of J by 0.22 * armLen to capture full deltoid logo);
     // phi = +-pi is armpit (starts outboard of J by +0.06 * armLen).
@@ -265,7 +267,7 @@ export function frames(mesh) {
   };
 
   return {
-    C, U, F, L, torso, armLen: armLens,
+    C, U, F, L, torso, armLen: armLens, cut: cuts,
     sleeve: (s, p) => arm[s](p),
     weight: (p) => ({ l: armW.l(p), r: armW.r(p) }),
     side: (p) => dot(sub(p, C), L) > 0 ? 'l' : 'r'

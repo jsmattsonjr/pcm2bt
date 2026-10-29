@@ -15,6 +15,12 @@ node pcm2bt.mjs KIT.png OUT.png       # about 15 s
 ./render.zsh OUT.png                  # contact sheet of the rider wearing it
 ```
 
+`SLEEVE=pcm` shortens Biketerra's sleeves (0.20 m from shoulder joint to cuff)
+to PCM's (~0.14 m), or `SLEEVE=0.16` to a length in metres, so sleeve art keeps
+PCM's proportions. Below the new cuff the atlas is transparent: the site fills
+the texture with the rider's skin colour before drawing the jersey, so that
+shows as bare arm, in whatever skin tone the rider has set.
+
 Kits for UE5 / modern PCM use another map and are out of scope.
 
 ## Requirements

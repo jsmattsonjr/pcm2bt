@@ -138,7 +138,7 @@ export function frames(mesh) {
   const axis = sub(Nk, H), torsoLen = Math.hypot(...axis);
   const U = axis.map((q) => q / torsoLen), L = perp(mesh.left, U), F = perp(mesh.fwd, U, L);
 
-  const arm = {}, armW = {};
+  const arm = {}, armW = {}, armLens = {};
   for (const s of ['l', 'r']) {
     const sg = s === 'l' ? 1 : -1;
     const J = mesh.joint[s], cuffC = centroid(mesh.cuff[s]);
@@ -163,7 +163,11 @@ export function frames(mesh) {
       const q = sub(p, J), t = dot(q, A), r = add(q, A, -t);
       return [Math.atan2(dot(r, FwdArm), dot(r, UpArm)), bent(q, t)];
     };
-    const tc = profile(mesh.cuff[s], raw);
+    // mesh.sleeveLen[s] (optional) moves the cuff toward the joint, scaling
+    // the cuff loop's distance along the arm to that joint-to-cuff length:
+    // s runs 0 to 1 over the shortened sleeve, beyond 1 is bare arm.
+    const tc1 = profile(mesh.cuff[s], raw), k = mesh.sleeveLen ? mesh.sleeveLen[s] / armLen : 1, tc = (ph) => tc1(ph) * k;
+    armLens[s] = armLen;
 
     // phi = 0 is top of shoulder (starts inboard of J by 0.22 * armLen to capture full deltoid logo);
     // phi = +-pi is armpit (starts outboard of J by +0.06 * armLen).
@@ -261,7 +265,7 @@ export function frames(mesh) {
   };
 
   return {
-    C, U, F, L, torso,
+    C, U, F, L, torso, armLen: armLens,
     sleeve: (s, p) => arm[s](p),
     weight: (p) => ({ l: armW.l(p), r: armW.r(p) }),
     side: (p) => dot(sub(p, C), L) > 0 ? 'l' : 'r'

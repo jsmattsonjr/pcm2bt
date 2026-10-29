@@ -12,7 +12,8 @@
 // Repose, per bone, blended by PCM's skin weights (linear blend skinning):
 // - torso bones (pelvis, spines, neck, head, thighs): heights along U warped
 //   per angle round the axis so PCM's hem loop lands on Biketerra's and its
-//   neck loop on Biketerra's, linearly between;
+//   collar base (collarBase(); the stand-up collar above it drops out) on
+//   Biketerra's neckline, linearly between;
 // - clavicles: then turned and stretched about the clavicle's root so the
 //   shoulder joint lands on Biketerra's;
 // - upper arms (PCM has no forearm bones; the sleeve is all upper arm): then
@@ -35,7 +36,7 @@
 // to the torso further down the arm than Biketerra does), and the nearest
 // point there was off-panel blobs; at 1 only the sleeve beyond the cut
 // (transparent) and odd texels at the hem and neck still fall back.
-import { lerp } from './pcm.js';
+import { lerp, subdivide } from './pcm.js';
 
 const sub = (a, b) => [a[0]-b[0], a[1]-b[1], a[2]-b[2]], dot = (a, b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 const add = (a, b, s = 1) => [a[0]+b[0]*s, a[1]+b[1]*s, a[2]+b[2]*s];
@@ -72,11 +73,16 @@ function angular(segs, coord, map = (p) => p, B = 72, SM = 0) {
       sum[j] += val; n[j]++;
     }
   }
-  const known = [...n.keys()].filter((j) => n[j]), f0 = new Float64Array(B);
+  return circular([...sum].map((v, j) => n[j] ? v / n[j] : null), SM);
+}
+// Values per angle bin (null where unknown) -> f(angle): gaps interpolated
+// round the circle, averaged over SM bins either side, linear between bins.
+function circular(v, SM = 0) {
+  const B = v.length, known = [...v.keys()].filter((j) => v[j] !== null), f0 = new Float64Array(B);
   for (let j = 0; j < B; j++) {
-    if (n[j]) { f0[j] = sum[j] / n[j]; continue; }
+    if (v[j] !== null) { f0[j] = v[j]; continue; }
     const p = known.findLast((q) => q < j) ?? known.at(-1) - B, q = known.find((q) => q > j) ?? known[0] + B;
-    const fp = sum[(p + B) % B] / n[(p + B) % B], fq = sum[q % B] / n[q % B];
+    const fp = v[(p + B) % B], fq = v[q % B];
     f0[j] = fp + (fq - fp) * (j - p) / (q - p);
   }
   const f = f0.map((_, j) => { let s = 0; for (let d = -SM; d <= SM; d++) s += f0[(j + d + B) % B]; return s / (2 * SM + 1); });
@@ -85,6 +91,37 @@ function angular(segs, coord, map = (p) => p, B = 72, SM = 0) {
 }
 // A loop's height along fr.U by the angle round it.
 const loopHeight = (segs, fr, map) => angular(segs, (p) => { const q = sub(p, fr.H); return [Math.atan2(dot(q, fr.L), dot(q, fr.F)), dot(q, fr.U)]; }, map);
+
+// PCM's collar base, its height along fr.U by the angle round it. PCM has a
+// tall stand-up collar (its back is the navy dome at the top of the default
+// kit's back panel); mapped neck loop to neckline, it folded down onto
+// Biketerra's upper back. The collar hugs a neck-sized cylinder and the yoke
+// flares out from it, so walking down each 10-degree meridian from the neck
+// loop (np) in 2.5 mm steps, the base is where the innermost surface first
+// lies DELTA outside the narrowest radius above it. On the default mesh: kit
+// row ~27 of 313 at the front, ~9 at the sides, ~20 at the back (the navy
+// dome ends at 24-25). An angle with no flare in COLLAR_SEARCH keeps the neck
+// loop. -> { z: f(angle) the base's height, r: f(angle) the radius the collar
+// stays within }.
+const COLLAR_DELTA = 0.01, COLLAR_SEARCH = 0.10;
+function collarBase(pcm, fr, np) {
+  const B = 36, Z = 0.0025, inner = Array.from({ length: B }, () => new Map());
+  for (const t of pcm.tris) subdivide(8, (sb) => {
+    const c = [0, 1, 2].map((i) => (sb[0][i] + sb[1][i] + sb[2][i]) / 3), q = sub(lerp(t, (v) => pcm.P[v], c), fr.H);
+    const x = dot(q, fr.F), y = dot(q, fr.L), r = Math.hypot(x, y), j = Math.floor((Math.atan2(y, x) + Math.PI) / TAU * B) % B, k = Math.floor(dot(q, fr.U) / Z);
+    const m = inner[j]; if (!(m.get(k) <= r)) m.set(k, r);
+  });
+  const base = inner.map((m, j) => {
+    const z0 = np((j + 0.5) / B * TAU - Math.PI); let rmin = Infinity;
+    for (let k = Math.floor(z0 / Z); k * Z > z0 - COLLAR_SEARCH; k--) {
+      const r = m.get(k); if (r === undefined) continue;
+      if (r > rmin + COLLAR_DELTA) return [(k + 1) * Z, rmin + COLLAR_DELTA];
+      rmin = Math.min(rmin, r);
+    }
+    return [z0, 0];
+  });
+  return { z: circular(base.map((b) => b[0]), 1), r: circular(base.map((b) => b[1]), 1) };
+}
 
 // Rotation by angle a about unit axis k (Rodrigues), and the shortest one
 // taking unit a to unit b.
@@ -115,14 +152,19 @@ export function repose(pcm, skin, bt, twist = 0, cut = null) {
   const Gn = (v) => add(add(fp.F.map((q) => q * dot(v, fb.F)), fp.L, dot(v, fb.L)), fp.U, dot(v, fb.U));
   const G = (p) => add(fp.H, Gn(sub(p, fb.H)));
 
-  // Torso: height warp between the loops, per angle round the axis.
-  const hp = loopHeight(pcm.mesh.hem, fp), np = loopHeight(pcm.mesh.neck, fp);
+  // Torso: height warp between the loops, per angle round the axis, PCM's
+  // collar base (not its neck loop) onto Biketerra's neckline.
+  const hp = loopHeight(pcm.mesh.hem, fp), cb = collarBase(pcm, fp, loopHeight(pcm.mesh.neck, fp)), np = cb.z;
   const hb = loopHeight(bt.hem, fp, G), nb = loopHeight(bt.neck, fp, G);
+  const polar = (p) => { const q = sub(p, fp.H), x = dot(q, fp.F), y = dot(q, fp.L); return [Math.atan2(y, x), dot(q, fp.U), Math.hypot(x, y)]; };
   const torso = (p) => {
-    const q = sub(p, fp.H), z = dot(q, fp.U), th = Math.atan2(dot(q, fp.L), dot(q, fp.F));
-    const h0 = hp(th), n0 = np(th), z1 = hb(th) + (z - h0) * (nb(th) - hb(th)) / (n0 - h0);
+    const [th, z] = polar(p), h0 = hp(th), n0 = np(th), z1 = hb(th) + (z - h0) * (nb(th) - hb(th)) / (n0 - h0);
     return add(p, fp.U, z1 - z);
   };
+  // The collar's triangles (wholly above the base and within its radius:
+  // at the sides the shoulder tops run out level with the base), left out
+  // of the projection.
+  const collar = (t) => t.every((v) => { const [th, z, r] = polar(pcm.P[v]); return z > np(th) + 0.002 && r < cb.r(th); });
 
   const d = skin.bones.map((b) => ({ name: b.name, at: [b.toMesh[0][3], b.toMesh[1][3], b.toMesh[2][3]] }));
   const bone = (n) => d.find((b) => b.name.endsWith(n));
@@ -165,7 +207,9 @@ export function repose(pcm, skin, bt, twist = 0, cut = null) {
     skin.boneIndex[v].forEach((b, k) => { const w = skin.boneWeight[v][k]; if (w) { out = add(out, fn[b](p), w); ws += w; } });
     return out.map((q) => q / ws);
   });
-  return { P, G, Gn, target, frame: fp };
+  const n0 = loopHeight(pcm.mesh.neck, fp);
+  target.collarDrop = [0, 90, 180, -90].map((d) => { const th = d * Math.PI / 180; return n0(th) - np(th); });
+  return { P, G, Gn, target, frame: fp, collar };
 }
 
 // Ray against triangle (Moller-Trumbore, two-sided) -> [t, b1, b2] or null.
@@ -198,7 +242,7 @@ function closest(p, a, b, c) {
 // -> look(p, n, w) -> [u, v] of the kit for Biketerra point p, unit normal n
 // and upper-arm weights w { l, r }; look.stats counts how each was found.
 export function projector(pcm, skin, bt, twist = 0, cut = null) {
-  const rp = repose(pcm, skin, bt, twist, cut), { P, G, Gn } = rp, tris = pcm.tris, ua = pcm.ua, UV = pcm.UV;
+  const rp = repose(pcm, skin, bt, twist, cut), { P, G, Gn } = rp, tris = pcm.tris.filter((t) => !rp.collar(t)), ua = pcm.ua, UV = pcm.UV;
   // Uniform grid, 2 cm cells; each triangle in every cell its box (grown by
   // half a cell) touches, so sampling a ray every half cell finds it.
   const V = 0.02, cells = new Map(), key = (i, j, k) => (i + 512) * 1048576 + (j + 512) * 1024 + (k + 512);

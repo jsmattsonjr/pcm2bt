@@ -74,6 +74,7 @@ paint(({ p, n, x, y }) => bare(p) ? [0, 0, 0, 0] : sampleKit(kit, ...(look ? loo
 if (look) {
   const t = look.stats.t.sort((a, b) => a - b), q = (f) => (t[Math.floor(f * (t.length - 1))] * 100).toFixed(1);
   console.log(`project: ${look.stats.ray} by ray, ${look.stats.near} nearest; distance cm p50 ${q(0.5)} p90 ${q(0.9)} p99 ${q(0.99)} max ${q(1)}`);
+  console.log(`  collar base below the neck loop, cm, front/left/back/right: ${look.repose.target.collarDrop.map((x) => (x * 100).toFixed(1)).join(' ')}`);
   const cs = look.repose.target.cuffScale;
   if (cs) for (const k of ['l', 'r']) console.log(`  cuff stretch ${k}, phi -180..135 by 45: ${cs[k].map((x) => x.toFixed(2)).join(' ')}; cuff off the cut by at most ${(look.repose.target.cuffMiss[k] * 100).toFixed(2)} cm`);
 }

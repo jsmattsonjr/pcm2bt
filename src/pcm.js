@@ -128,7 +128,7 @@ function facingProfile(surface, side, raw, basis, sOf) {
     return wrap(at[j + 1] + (at[j + 2] - at[j + 1]) * t); };
 }
 
-const JOINT_TH = Number(process.env.JOINT_TH ?? 62) * Math.PI / 180, E_WARP0 = Number(process.env.E_WARP0 ?? 0.4);
+const JOINT_TH = Number(process.env.JOINT_TH ?? 62) * Math.PI / 180, E_WARP0 = Number(process.env.E_WARP0 ?? 0.4), YOKE = Number(process.env.YOKE ?? 0.20), BEND = Number(process.env.BEND ?? 0), BEND_T = 0.03, BEND_LN = Number(process.env.BEND_LN ?? 1.2);
 
 // Geometric sleeve weight & coordinates from the shoulder joint J to cuff:
 // avoids the PCM vs Biketerra deltoid skin-weight mismatch where PCM weights
@@ -155,23 +155,28 @@ export function frames(mesh) {
     ]);
     if (dot(FwdArm, F) < 0) for (let i = 0; i < 3; i++) FwdArm[i] = -FwdArm[i];
 
+    let nside = null;
+    for (const [a, b] of mesh.neck) for (const q of [a, b]) if (!nside || Math.hypot(...sub(q, J)) < Math.hypot(...sub(nside, J))) nside = q;
+    const LN = Math.hypot(...sub(nside, J)), D = sub(nside, J).map((q) => q / LN);
+    const bent = (q, t) => BEND ? t - Math.max(0, t + dot(q, D)) * (1 - smooth(0, BEND_T, t)) : t;
     const raw = (p) => {
       const q = sub(p, J), t = dot(q, A), r = add(q, A, -t);
-      return [Math.atan2(dot(r, FwdArm), dot(r, UpArm)), t];
+      return [Math.atan2(dot(r, FwdArm), dot(r, UpArm)), bent(q, t)];
     };
     const tc = profile(mesh.cuff[s], raw);
 
     // phi = 0 is top of shoulder (starts inboard of J by 0.22 * armLen to capture full deltoid logo);
     // phi = +-pi is armpit (starts outboard of J by +0.06 * armLen).
-    const t0 = (ph) => (-0.08 - 0.14 * Math.cos(ph)) * armLen;
+    const scale = BEND ? BEND_LN * LN : armLen;
+    const t0 = (ph) => (-0.08 - 0.14 * Math.cos(ph)) * scale;
     const sOf = (p) => { const [ph, t] = raw(p), a = t0(ph); return (t - a) / (tc(ph) - a); };
     const facing = facingProfile(mesh.surface, s, raw, { J, A, UpArm, FwdArm }, sOf);
     arm[s] = (p) => [facing(raw(p)[0]), sOf(p)];
 
     armW[s] = (p) => {
-      const q = sub(p, J), t = dot(q, A), rVec = add(q, A, -t), r = Math.hypot(...rVec);
+      const q = sub(p, J), t0q = dot(q, A), rVec = add(q, A, -t0q), r = Math.hypot(...rVec);
       if (r > 0.11) return 0;
-      const [ph] = raw(p);
+      const [ph, t] = raw(p);
       // Allow the top of the shoulder (cos(ph) > 0) to reach slightly inboard of J,
       // while keeping the front chest and back strictly masked out.
       // The lateral test only holds near the joint: Biketerra's seated arms
@@ -236,7 +241,7 @@ export function frames(mesh) {
 
     const r = Math.hypot(dot(q, F) - x0, dot(q, L));
     const zc = z - 0.5 * torsoLen;
-    return [th, zc - 0.20 * Math.max(0, zc) * (r / torsoLen)];
+    return [th, zc - YOKE * Math.max(0, zc) * (r / torsoLen)];
   };
   const eh = profile(mesh.hem, torsoRaw), en = profile(mesh.neck, torsoRaw);
   const torso0 = (p) => { const [th, e] = torsoRaw(p), a = eh(th); return [th, (e - a) / (en(th) - a)]; };

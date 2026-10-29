@@ -217,3 +217,10 @@ too ragged (t swinging −9 to +6 cm in 20° of φ); grids with a fallback
 between parts made comb-edged shards along the armhole; and a 40° sleeve
 twist, to hide PCM's front panel on the inner sleeve, is no better than
 none under projection.
+
+## License
+
+MIT; see `LICENSE`. `vendor/` holds three.js, under its own MIT licence
+(Copyright 2010-2023 Three.js Authors). The rider models the fetch scripts
+download belong to their owners (Biketerra, Cyanide via PCM.daily, pcmmod.com)
+and are not covered.

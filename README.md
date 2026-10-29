@@ -38,6 +38,8 @@ Kits for UE5 / modern PCM use another map and are out of scope.
 | `src/pose.js`, `posmap.js`, `torsomap.js`, `decal.js` | The pose, and the 3D position of every sleeve and torso texel. |
 | `src/glb.js`, `rig.js`, `view.js`, `template.js`, `image.js`, `png.js` | GLB parser, skinned rig, rasteriser, template mask, island fill, PNG I/O. |
 | `src/preview.js`, `render.html`, `render.zsh` | The WebGL rider and its headless contact sheet. |
+| `debug/testkit.py` | A synthetic kit: front panel orange, back blue, checkered, gridded every 50 px. |
+| `debug/pcmrender.mjs` | The PCM rider wearing a kit (software render), to set beside `render.zsh`'s. |
 | `assets/` | `jersey-mask.png`, the rider models and the PCM rider. Only the mask is in git. |
 | `skill/SKILL.md` | The `pcm2bt` Claude Code skill. Link it as `.claude/skills/pcm2bt/SKILL.md`. |
 
@@ -110,6 +112,19 @@ bilinearly over the pixels PCM's triangles touch only, so the gutters between
 islands never bleed in. `DEBUG=1` also writes the canonical position as colour
 for both riders (`OUT-coords.png`; `OUT-pcmcoords.png` in kit space);
 converting the second should reproduce the first.
+
+To see where the mapping puts things, convert the test kit and look at it
+on both riders from the same side:
+
+```zsh
+source python.zsh && $py debug/testkit.py /tmp/tk.png
+node pcm2bt.mjs /tmp/tk.png /tmp/tk-bt.png
+./render.zsh /tmp/tk-bt.png /tmp/tk-bt-render.png -1.3,1.75,0,0.357,1.2,0   # from behind, seated
+node debug/pcmrender.mjs /tmp/tk-pcm.png -1 0 0.3 /tmp/tk.png                # PCM, from behind
+```
+
+PCM's own pose is not Biketerra's (or its game's), so compare where each
+panel and grid line lands on the body, not the silhouettes.
 
 Earlier tries, for the record: per-part lookup grids with the UV islands as
 Biketerra's sleeve split left torso-coloured patches on the underarms; with

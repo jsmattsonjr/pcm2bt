@@ -34,7 +34,7 @@ Kits for UE5 / modern PCM use another map and are out of scope.
 |---|---|
 | `pcm2bt.mjs` | The converter. |
 | `src/pcm.js` | The PCM rider and its correspondence with Biketerra's. |
-| `src/paint.js` | `paint()`: supersampling, slivers and bleed, in the stopped pose. |
+| `src/paint.js` | `paint()`: supersampling, slivers and bleed, in the seated pose. |
 | `src/pose.js`, `posmap.js`, `torsomap.js`, `decal.js` | The pose, and the 3D position of every sleeve and torso texel. |
 | `src/glb.js`, `rig.js`, `view.js`, `template.js`, `image.js`, `png.js` | GLB parser, skinned rig, rasteriser, template mask, island fill, PNG I/O. |
 | `src/preview.js`, `render.html`, `render.zsh` | The WebGL rider and its headless contact sheet. |
@@ -48,7 +48,8 @@ Kits for UE5 / modern PCM use another map and are out of scope.
 files in `../jersey-projector`. `src/{pose,posmap,torsomap,decal}.js` come from
 its `oneoff/chrono/` and `src/paint.js` from `oneoff/rsc/paint.mjs`, with
 their imports flattened. They are not linked, so a fix to one side has to be
-carried to the other by hand.
+carried to the other by hand. One deliberate difference: here `pose.js` and
+`render.zsh` default to the seated pose, not stopped.
 
 ## Models
 
@@ -61,7 +62,9 @@ when the tools were measured on it:
 - `assets/rider_m.glb` is `rider_m.rb1Dgf6L.glb`, the mesh and UVs.
 - `assets/rider_low_lod.glb` is `rider_low_lod.Ct7jtfaL.glb`. The settings
   page rebinds `rider_m` to its skeleton and poses it with its clips: stopped
-  is `mount` at t=0.
+  is `mount` at t=0, seated is `pedal.seated`. pcm2bt paints in seated
+  (`POSE` overrides it; see `src/pose.js`), the riding pose and the one
+  closest to PCM's.
 
 If the site ships a new hash, re-check the UVs against the template, then
 update the names and hashes in `fetch-assets.zsh`. To find the current names,

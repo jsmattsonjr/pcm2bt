@@ -1,12 +1,14 @@
-// The pose the jersey is measured in. POSE=stopped (default) is the settings
-// page's static preview: rider_m on the low-LOD skeleton, `mount` clip at
-// t=0. seated/standing use the pedalling clips at T seconds; bind is the
-// GLB's own pose.
+// The pose the jersey is measured in: rider_m on the low-LOD skeleton, posed
+// by one of its clips. POSE=seated (default) is `pedal.seated` at T seconds
+// (default 0), the riding pose and the closest to PCM's rider (torso lean 64
+// vs 66 deg, arms 91 vs 92 deg from the torso; it barely moves over the
+// stroke). stopped is the settings page's static preview (`mount` at t=0,
+// lean 28 deg); standing is `pedal.standing`; bind is the GLB's own pose.
 import { readFileSync } from 'node:fs';
 const R = new URL('../', import.meta.url).pathname; // repo root
 const { parseGLB } = await import('./glb.js');
 const CLIP = { stopped: 'mount', seated: 'pedal.seated', standing: 'pedal.standing' };
-export const POSE = process.env.POSE || 'stopped';
+export const POSE = process.env.POSE || 'seated';
 
 export function posed(rig, pose = POSE) {
   if (pose === 'bind') return rig.reset();

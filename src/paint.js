@@ -1,5 +1,5 @@
 // Paint the whole atlas from a 3D colour function, in the pose from
-// pose.js (default stopped). Supersampled 4x4 per texel; sleeve
+// pose.js (default seated). Supersampled 4x4 per texel; sleeve
 // texels average only the triangle covering most of them, sliver triangles
 // are coloured from their own 3D position, and islands bleed 4 px at seams
 // (as in jersey-projector's one-offs).

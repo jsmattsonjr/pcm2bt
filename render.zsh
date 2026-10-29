@@ -4,10 +4,11 @@
 #   ./render.zsh ATLAS.png [OUT.png] [VIEW...]
 # Views are render.html names (front back left right three front-close
 # back-close left-close right-close top) or px,py,pz,tx,ty,tz. Default: the four
-# close views. POSE=bind|stopped|seated|standing (default stopped, the settings
-# page's static pose) and T=seconds into the pedalling clips; BASIC=1 renders
-# unlit; SIZE sets each tile (700). CHROME is the Chrome binary (default: the
-# macOS app); PYTHON a Python with Pillow (see python.zsh).
+# close views. POSE=bind|stopped|seated|standing (default seated, the pose
+# pcm2bt paints in; stopped is the settings page's static pose) and
+# T=seconds into the pedalling clips; BASIC=1 renders unlit; SIZE sets each
+# tile (700). CHROME is the Chrome binary (default: the macOS app); PYTHON a
+# Python with Pillow (see python.zsh).
 set -e
 here=${0:A:h}
 atlas=${1:?usage: render.zsh ATLAS.png [OUT.png] [VIEW...]}
@@ -33,7 +34,7 @@ for v in $views; do
   t=$w/tile-$#tiles.png
   "$chrome" --headless=new --use-angle=metal --hide-scrollbars --window-size=$size,$size \
     --virtual-time-budget=15000 --screenshot=$t \
-    "http://localhost:$port/render.html?atlas=atlas.png&view=$v&pose=${POSE:-stopped}&t=${T:-0}${BASIC:+&basic=1}" >/dev/null 2>&1
+    "http://localhost:$port/render.html?atlas=atlas.png&view=$v&pose=${POSE:-seated}&t=${T:-0}${BASIC:+&basic=1}" >/dev/null 2>&1
   tiles+=($t)
 done
 $py - $out $tiles <<'PY'

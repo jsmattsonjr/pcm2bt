@@ -1,4 +1,4 @@
-// Pro Cycling Manager kit -> Biketerra jersey atlas (512², stopped pose).
+// Pro Cycling Manager kit -> Biketerra jersey atlas (512², seated pose).
 //   node pcm2bt.mjs KIT.png OUT.png
 // KIT is a classic-layout PCM kit (<team>_maillot: 455x313 up to PCM12,
 // 910x626 from PCM13; any size of that map). The shorts are dropped: the

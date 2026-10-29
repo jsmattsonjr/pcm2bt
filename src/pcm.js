@@ -209,7 +209,8 @@ export function loadPCM(path, clipName = PCM_CLIP, t = PCM_T) {
   // pelvis), torso leaning about 58 degrees in the bind pose, so forward is the
   // chest, facing down; the clips move the torso about the fixed pelvis.
   const mesh = { hem, neck, cuff, joint: { l: lJ, r: rJ }, left: sub(lJ, rJ), fwd: [0, -1, 0] };
-  return { P, UV, ua, tris, mesh, fr: frames(mesh), boneAt: at };
+  return { P, UV, ua, tris, all, other: [], mesh, fr: frames(mesh), boneAt: at, up: [0, 0, 1], mirrored: true,
+    skin: { bones: d.bones, boneIndex: d.boneIndex, boneWeight: d.boneWeight } };
 }
 
 // The kit pixels PCM's jersey triangles touch (rasterised at 4x, so edge

@@ -10,8 +10,10 @@ kit, use the `jersey-design` skill.
 
 `node pcm2bt.mjs KIT.png OUT.png` converts a classic-layout PCM kit
 (`<team>_maillot`, 455×313 or 910×626) into an atlas, shorts dropped. Run
-`./fetch-assets.zsh` and `./fetch-pcm.zsh` once first (PCM's rider from the Wayback
-Machine; Cyanide's asset, never committed). The README has the method.
+`./fetch-assets.zsh`, `./fetch-pcm.zsh` and `./fetch-pcmmod.zsh` once first (PCM's
+rider from the Wayback Machine and from pcmmod.com's jersey viewer, never
+committed). The README has the method. To judge a result, compare it with
+the kit in pcmmod.com's viewer, which pcm2bt now follows.
 
 - Render the result, and to judge it, render the kit on PCM's own rider too:
   a kit's shoulder lettering often straddles PCM's sleeve and shoulder, and

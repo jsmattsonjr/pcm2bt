@@ -10,7 +10,8 @@ PCM12, the same map at 910×626 from PCM13) and drops the shorts:
 
 ```zsh
 ./fetch-assets.zsh                    # once: Biketerra's rider models
-./fetch-pcm.zsh                       # once: the PCM rider
+./fetch-pcm.zsh                       # once: PCM.daily's PCM rider (bones, kit map)
+./fetch-pcmmod.zsh                    # once: pcmmod.com's PCM rider (the surface)
 node pcm2bt.mjs KIT.png OUT.png       # about 10 s
 ./render.zsh OUT.png                  # contact sheet of the rider wearing it
 ```
@@ -41,7 +42,8 @@ Kits for UE5 / modern PCM use another map and are out of scope.
 |---|---|
 | `pcm2bt.mjs` | The converter. |
 | `src/project.js` | The correspondence: PCM's jersey reposed onto Biketerra's rider and projected. |
-| `src/pcm.js` | The PCM rider, each rider's sleeve frame and cut, kit sampling. |
+| `src/pcm.js` | PCM.daily's PCM rider, each rider's sleeve frame and cut, kit sampling. |
+| `src/pcmmod.js` | pcmmod.com's PCM rider, given PCM.daily's bones; `loadRider()` picks one. |
 | `src/paint.js` | `paint()`: supersampling, slivers and bleed, in the seated pose. |
 | `src/pose.js`, `posmap.js`, `torsomap.js`, `decal.js` | The pose, and the 3D position of every sleeve and torso texel. |
 | `src/glb.js`, `rig.js`, `view.js`, `template.js`, `image.js`, `png.js` | GLB parser, skinned rig, rasteriser, template mask, island fill, PNG I/O. |
@@ -81,8 +83,35 @@ update the names and hashes in `fetch-assets.zsh`. To find the current names,
 fetch `https://biketerra.com/`, follow the `_app/immutable/` imports, and grep
 for `rider_[a-z_]*\.[A-Za-z0-9_-]+\.glb`.
 
-## The PCM rider
+## The PCM riders
 
+pcm2bt projects from **pcmmod.com's** rider by default (`PCM_MESH=pcmmod`),
+the one its web jersey viewer shows (https://pcmmod.com/jersey/viewer/viewer):
+the way a kit is meant to look. `fetch-pcmmod.zsh` downloads its glTF scene
+(`pages/jersey/viewer/ressources/scene.gltf` and `scene.bin`, public, fetched
+2026-10-29) into `assets/pcmmod/` and checks their SHA-256s. It is one static
+mesh, the whole rider (body, head, kit, shoes, bottle) standing with arms
+forward and down; y up, facing +z, unmirrored; no skeleton. Its UVs index the
+viewer's 2048² composite, into which the viewer draws the kit at
+x 832, y 1206, 1200×826 (`jersey_viewer_viewer.bundle.js`,
+`elementsPosition`); `src/pcmmod.js` maps them back to the kit and keeps the
+triangles there that PCM.daily's rider also covers. Rendered with the test
+kit (`debug/pcmrender.mjs`), it matches the viewer's own renders of it.
+
+With no skeleton of its own, it borrows PCM.daily's (below): the riders share
+the classic map, so each kit vertex takes the bone weights and bind position
+of the PCM.daily point with the same kit UV, and each bone is placed by a
+weighted rigid fit of those bind points (mirrored, at the global
+similarity's scale, 0.95) onto pcmmod's. The fits leave 2–4.5 cm RMS, the
+two bodies' different shapes; the bones only carry the repose, which lands on
+Biketerra's landmarks either way. Its boundaries are found as loops: the
+open jersey edges chained, each loop the neck, a cuff or the hem by the bone
+nearest its centroid. pcmmod's sleeve sits rolled round the arm as the kit
+was drawn for ("Sunweb" down the outer arm of the default kit, the cuff text
+on the outside), where PCM.daily's puts that lettering on top of the
+shoulder, so Biketerra's sleeve now follows the viewer's.
+
+`PCM_MESH=jview` projects from **PCM.daily's** rider instead, as before.
 It is Cyanide's, so the repo does not carry it either. `fetch-pcm.zsh`
 downloads PCM.daily's old Unity shirt viewer
 (`shirtdb/viewer/Jview_v16.unity3d`, Unity 2.5) from the Wayback Machine
@@ -99,7 +128,7 @@ product: the LKHC kit's lettering reads correctly on Biketerra's rider.
 
 The bundle also holds the viewer's two animation clips, `idle` (standing)
 and `loop` (riding, one pedal stroke in 0.67 s), which `pcm-extract.py`
-exports into the JSON (`clips`). `PCM_CLIP=loop|idle` poses PCM's rider with
+exports into the JSON (`clips`). `PCM_CLIP=loop|idle` poses PCM.daily's rider (`PCM_MESH=jview`) with
 one, at `PCM_T` seconds, before the repose, in `pcm2bt.mjs` and
 `debug/pcmrender.mjs` alike; the default, `bind`, is the mesh as stored. At
 every bone the jersey is skinned to, either clip is within a few degrees

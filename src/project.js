@@ -141,12 +141,12 @@ function swing(o, from, to) {
   return (p) => { let y = sub(p, o); y = add(y, ah, (k - 1) * dot(y, ah)); return add(o, R(y)); };
 }
 
-// pcm: loadPCM(); skin: the parsed pcm_cyclist.json (bones, boneIndex,
-// boneWeight); bt: the Biketerra mesh as pcm2bt.mjs builds it for frames()
+// pcm: loadRider() (its skin: bones, boneIndex, boneWeight); bt: the Biketerra mesh as pcm2bt.mjs builds it for frames()
 // (hem, neck, cuff, joint, left, fwd, optional sleeveLen); cut: frames(bt).cut,
 // the cuts to match PCM's cuffs to (none: centroids only). -> { P (reposed
 // positions), G, Gn (Biketerra point / direction -> PCM space), target }.
-export function repose(pcm, skin, bt, twist = 0, cut = null) {
+export function repose(pcm, bt, twist = 0, cut = null) {
+  const skin = pcm.skin;
   const fp = frameOf(pcm.mesh), fb = frameOf(bt);
   const Gn = (v) => add(add(fp.F.map((q) => q * dot(v, fb.F)), fp.L, dot(v, fb.L)), fp.U, dot(v, fb.U));
   const G = (p) => add(fp.H, Gn(sub(p, fb.H)));
@@ -205,7 +205,7 @@ export function repose(pcm, skin, bt, twist = 0, cut = null) {
   const P = pcm.P.map((p, v) => {
     let out = [0, 0, 0], ws = 0;
     skin.boneIndex[v].forEach((b, k) => { const w = skin.boneWeight[v][k]; if (w) { out = add(out, fn[b](p), w); ws += w; } });
-    return out.map((q) => q / ws);
+    return ws ? out.map((q) => q / ws) : p;   // not kit (pcmmod's body): unused
   });
   const n0 = loopHeight(pcm.mesh.neck, fp);
   target.collarDrop = [0, 90, 180, -90].map((d) => { const th = d * Math.PI / 180; return n0(th) - np(th); });
@@ -241,8 +241,8 @@ function closest(p, a, b, c) {
 
 // -> look(p, n, w) -> [u, v] of the kit for Biketerra point p, unit normal n
 // and upper-arm weights w { l, r }; look.stats counts how each was found.
-export function projector(pcm, skin, bt, twist = 0, cut = null) {
-  const rp = repose(pcm, skin, bt, twist, cut), { P, G, Gn } = rp, tris = pcm.tris.filter((t) => !rp.collar(t)), ua = pcm.ua, UV = pcm.UV;
+export function projector(pcm, bt, twist = 0, cut = null) {
+  const rp = repose(pcm, bt, twist, cut), { P, G, Gn } = rp, tris = pcm.tris.filter((t) => !rp.collar(t)), ua = pcm.ua, UV = pcm.UV;
   // Uniform grid, 2 cm cells; each triangle in every cell its box (grown by
   // half a cell) touches, so sampling a ray every half cell finds it.
   const V = 0.02, cells = new Map(), key = (i, j, k) => (i + 512) * 1048576 + (j + 512) * 1024 + (k + 512);

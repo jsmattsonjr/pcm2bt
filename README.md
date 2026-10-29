@@ -39,6 +39,7 @@ All optional; the defaults are what the converter is tuned for.
 | `PCM_T` | `0` | `pcm2bt.mjs`, `pcmrender` | Seconds into `PCM_CLIP`. |
 | `TWIST` | `0` | `pcm2bt.mjs` | Degrees to turn the sleeve content round the arm, top toward the back, tapering in from the shoulder. |
 | `TMAX` | `0.08` | `pcm2bt.mjs` | How far (m) the projection casts each way along the normal. |
+| `RELAX` | `50` | `pcm2bt.mjs` | Smoothing steps for the repose's displacement round the armholes; `0` off. See Correspondence. |
 | `LAMBDA` | `0.08` | `pcm2bt.mjs` | Cost (m) per unit of upper-arm skin-weight mismatch when scoring hits. |
 | `MISS` | `1` | `pcm2bt.mjs` | Weight mismatch past which a hit is rejected in favour of the nearest point. |
 | `DEBUG` | unset | `pcm2bt.mjs` | `1` also writes `OUT-reposed.json` and `OUT-hits.png`. See Correspondence. |
@@ -192,6 +193,15 @@ weights), bone by bone:
   only the centroids matched its cuff band climbed toward the inner arm.
   `TWIST` (degrees, default 0) turns the sleeve content round the arm, top
   toward the back, tapering in from the shoulder.
+- **Armholes**: blended by skin weight, the clavicle's turn folded the
+  armhole where it is shared with the spine and upper arm: back-armhole
+  triangles shrank to a fifth of their area and front ones grew threefold,
+  so the Canada kit's thin red arc under the arm came out a red smile on
+  Biketerra's. So the displacement (reposed minus bind) at every vertex
+  weighted to a clavicle is relaxed to the mean of its neighbours', 50
+  Jacobi steps (`RELAX`; converged, 0 turns it off), the rest held. Area
+  ratios now stay within 0.5–1.9 (PCM.daily's rider: 0.6–1.5), and fewer
+  texels fall back to the nearest point.
 
 The projection casts both ways along the normal, up to 8 cm (`TMAX`), and
 scores each hit by its distance plus 8 cm (`LAMBDA`) per unit of difference

@@ -207,9 +207,34 @@ export function repose(pcm, bt, twist = 0, cut = null) {
     skin.boneIndex[v].forEach((b, k) => { const w = skin.boneWeight[v][k]; if (w) { out = add(out, fn[b](p), w); ws += w; } });
     return ws ? out.map((q) => q / ws) : p;   // not kit (pcmmod's body): unused
   });
+  if (RELAX) relax(pcm, P);
   const n0 = loopHeight(pcm.mesh.neck, fp);
   target.collarDrop = [0, 90, 180, -90].map((d) => { const th = d * Math.PI / 180; return n0(th) - np(th); });
   return { P, G, Gn, target, frame: fp, collar };
+}
+
+// Linear blend skinning folds the armhole, where the shoulder's turn is
+// shared between clavicle, upper arm and spine. Relax the displacement
+// (reposed - bind) over the jersey's vertices weighted to a clavicle, by
+// RELAX (default 50, converged; 0 is off) Jacobi steps of the mean of their
+// neighbours' (welded by position); every other vertex holds, so the cuffs,
+// hem and neck stay where they were put.
+export const RELAX = Number(process.env.RELAX ?? 50);
+function relax(pcm, P) {
+  const key = (p) => p.map((q) => Math.round(q * 1e5)).join(','), id = new Map(), rep = [];
+  for (const t of pcm.tris) for (const v of t) { const k = key(pcm.P[v]); if (!id.has(k)) { id.set(k, rep.length); rep.push([]); } rep[id.get(k)].push(v); }
+  const of = (v) => id.get(key(pcm.P[v])), nb = rep.map(() => new Set());
+  for (const t of pcm.tris) for (let i = 0; i < 3; i++) { const a = of(t[i]), b = of(t[(i + 1) % 3]); nb[a].add(b); nb[b].add(a); }
+  const names = pcm.skin.bones.map((b) => b.name);
+  const clav = (v) => pcm.skin.boneIndex[v].reduce((s, b, k) => s + (names[b].endsWith('Clavicle') ? pcm.skin.boneWeight[v][k] : 0), 0);
+  const free = rep.map((vs) => clav(vs[0]) > 0.01);
+  let D = rep.map((vs) => sub(P[vs[0]], pcm.P[vs[0]]));
+  for (let it = 0; it < RELAX; it++) D = D.map((d, i) => {
+    if (!free[i]) return d;
+    let m = [0, 0, 0]; for (const j of nb[i]) m = add(m, D[j]);
+    return m.map((q) => q / nb[i].size);
+  });
+  rep.forEach((vs, i) => { if (free[i]) for (const v of vs) P[v] = add(pcm.P[v], D[i]); });
 }
 
 // Ray against triangle (Moller-Trumbore, two-sided) -> [t, b1, b2] or null.

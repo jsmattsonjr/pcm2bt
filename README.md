@@ -96,7 +96,13 @@ scaled per θ hem 0 to neckline 1; per sleeve, φ round the joint-to-cuff axis
 (0 out from the body, + forward) and s along it, scaled per φ from the
 sleeve's floor to the cuff. Sleeve and torso are split the same way on both,
 where the upper-arm skin weight passes 0.5, since the UV islands split them in
-different places. Both riders are then laid on one canonical body, the torso
+different places. φ is measured by the way the surface faces round the arm,
+not by position angle, since Biketerra's sleeve sits off its axis (baggy
+underneath) where PCM's is round. `TWIST` (degrees, default 40) then turns
+the sleeve content round the arm: PCM's front panel covers the inner half of
+the sleeve, which PCM's game hides with the arms against the body but
+Biketerra's riding pose shows from behind; `TWIST=0` keeps PCM's placement.
+Both riders are then laid on one canonical body, the torso
 on a cylinder and the arms held out sideways, blended by that weight across
 the armhole, and each Biketerra subsample takes the UV of the closest point on
 PCM's (a voxel hash of the PCM triangles cut 3×3). The kit is sampled

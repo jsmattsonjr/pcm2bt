@@ -40,7 +40,15 @@ const names = glb.skinJoints.map((i) => glb.nodes[i].name), wmap = { l: new Floa
 const wt = (v, n) => { let s = 0; for (let k = 0; k < 4; k++) if (names[glb.joints[v*4+k]] === n) s += glb.weights[v*4+k]; return s; };
 const btw = tris.flat().reduce((m, v) => (m[v] ||= { l: wt(v, 'upperArm.l'), r: wt(v, 'upperArm.r') }, m), []);
 bt.surface = { tris, pos: pt, w: (v) => btw[v] };
-const fr = frames(bt);
+// Sleeve twist: PCM's front panel covers the inner half of the sleeve, front
+// round to back. PCM's game hangs the arms against the body, hiding the
+// inner back; Biketerra's riding pose holds them forward and apart, so from
+// behind the front panel's colour shows on the inner half. Turning the sleeve content
+// TWIST degrees (default 40) round the arm wraps the outer half onto the
+// back, as the kit looks in PCM, at the cost of strict placement. 0 maps the
+// sleeves as they sit on PCM's mesh.
+const fr = frames(bt), sleeve = fr.sleeve, TWIST = Number(process.env.TWIST ?? 40) * Math.PI / 180;
+fr.sleeve = (s, p) => { const [ph, t] = sleeve(s, p); return [ph + TWIST, t]; };
 const pcm = loadPCM(R + 'assets/pcm_cyclist.json'), match = pcmMatch(pcm);
 console.log(`Biketerra: hem ${bt.hem.length}, neck ${bt.neck.length}, cuffs ${bt.cuff.l.length}+${bt.cuff.r.length} edges; PCM: ${pcm.tris.length} jersey triangles`);
 for (const t of tris) {

@@ -92,6 +92,42 @@ function floorProfile(surface, side, raw) {
   return (ang) => { const x = (wrap(ang) + Math.PI) / TAU * 36 - 0.5, j = Math.floor(x), t = x - j; return sm[(j + 36) % 36] * (1 - t) + sm[(j + 1) % 36] * t; };
 }
 
+// phi by the way the sleeve faces instead of where it lies: f(phi) -> the
+// angle round the arm of the surface's outward normal there (same UpArm /
+// FwdArm basis), the mean per 10 degrees of phi over the side's sleeve
+// surface (skin weight) between s 0.3 and 0.95, gaps interpolated, smoothed,
+// and kept increasing so it stays one-to-one. Biketerra's sleeve sits off
+// its joint-to-cuff axis (7.8 cm below it, 4.7 cm above at mid sleeve, where
+// PCM's is round at ~5 cm), so by position angle the strip of PCM's front
+// panel along the underside spread up the back of Biketerra's sleeve; by
+// arc length it still reached its outward-facing slope (16% of that area,
+// PCM 0%). Matched by facing, each panel faces the camera as it does on PCM.
+function facingProfile(surface, side, raw, basis, sOf) {
+  const cs = new Float64Array(36), sn = new Float64Array(36), n = new Float64Array(36);
+  for (const t of surface.tris) subdivide(4, (sb) => {
+    const c = [0, 1, 2].map((i) => (sb[0][i] + sb[1][i] + sb[2][i]) / 3);
+    if (partOf({ l: lerp(t, (v) => surface.w(v).l, c), r: lerp(t, (v) => surface.w(v).r, c) }) !== side) return;
+    const p = lerp(t, surface.pos, c), s = sOf(p); if (s < 0.3 || s > 0.95) return;
+    const ps = sb.map((b) => lerp(t, surface.pos, b)), a = sub(ps[1], ps[0]), b = sub(ps[2], ps[0]);
+    const cr = [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]], area = Math.hypot(...cr); if (!area) return;
+    const q = sub(p, basis.J), r = add(q, basis.A, -dot(q, basis.A)), o = dot(cr, r) < 0 ? -1 : 1;   // outward, whatever the winding
+    const j = Math.floor((wrap(raw(p)[0]) + Math.PI) / TAU * 36) % 36;
+    cs[j] += o * dot(cr, basis.UpArm); sn[j] += o * dot(cr, basis.FwdArm); n[j]++;
+  });
+  // Offset of the facing from each bin's centre, interpolated round the circle where empty.
+  const mid = (j) => (j + 0.5) / 36 * TAU - Math.PI, known = [...n.keys()].filter((j) => n[j]);
+  const off = (j) => wrap(Math.atan2(sn[j], cs[j]) - mid(j));
+  const d = [...n.keys()].map((j) => { if (n[j]) return off(j);
+    const p = known.findLast((k) => k < j) ?? known.at(-1) - 36, q = known.find((k) => k > j) ?? known[0] + 36;
+    const dp = off((p + 36) % 36), dq = off(q % 36); return dp + wrap(dq - dp) * (j - p) / (q - p); });
+  const sm = d.map((_, i) => [-1, 0, 1].reduce((a, k) => a + d[(i + k + 36) % 36], 0) / 3);
+  const psi = sm.map((v, j) => mid(j) + v);
+  for (let j = 1; j < 36; j++) psi[j] = Math.max(psi[j], psi[j - 1] + 0.01);
+  const at = [psi[35] - TAU, ...psi, psi[0] + TAU];   // bin centres -1..36
+  return (ang) => { const x = (wrap(ang) + Math.PI) / TAU * 36 - 0.5, j = Math.floor(x), t = x - j;
+    return wrap(at[j + 1] + (at[j + 2] - at[j + 1]) * t); };
+}
+
 // Geometric sleeve weight & coordinates from the shoulder joint J to cuff:
 // avoids the PCM vs Biketerra deltoid skin-weight mismatch where PCM weights
 // the upper sleeve ("Sunweb"/"PROJOB") to the torso bones.
@@ -126,10 +162,9 @@ export function frames(mesh) {
     // phi = 0 is top of shoulder (starts inboard of J by 0.22 * armLen to capture full deltoid logo);
     // phi = +-pi is armpit (starts outboard of J by +0.06 * armLen).
     const t0 = (ph) => (-0.08 - 0.14 * Math.cos(ph)) * armLen;
-    arm[s] = (p) => {
-      const [ph, t] = raw(p), a = t0(ph);
-      return [ph, (t - a) / (tc(ph) - a)];
-    };
+    const sOf = (p) => { const [ph, t] = raw(p), a = t0(ph); return (t - a) / (tc(ph) - a); };
+    const facing = facingProfile(mesh.surface, s, raw, { J, A, UpArm, FwdArm }, sOf);
+    arm[s] = (p) => [facing(raw(p)[0]), sOf(p)];
 
     armW[s] = (p) => {
       const q = sub(p, J), t = dot(q, A), rVec = add(q, A, -t), r = Math.hypot(...rVec);
